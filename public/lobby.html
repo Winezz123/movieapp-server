@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Лобби</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="lobby-body">
+
+  <div class="sidebar">
+    <div class="menu-top">
+      <button class="tab active">Друзья</button>
+      <button class="tab">Личные сообщения</button>
+    </div>
+
+    <button class="add-friend-btn" onclick="openAddFriend()">Добавить друга</button>
+
+    <div class="channels" id="friendsList">
+      <!-- Друзья будут подгружаться динамически -->
+    </div>
+
+    <div class="profile-block">
+      <img id="profileAvatar" class="avatar" src="https://img.icons8.com/ios-filled/100/ffffff/user.png" alt="avatar">
+      <div class="profile-info">
+        <div id="profileName" class="profile-name">User</div>
+        <div class="profile-sub">#0001</div>
+      </div>
+      <button id="settingsBtn" class="gear">⚙</button>
+    </div>
+  </div>
+
+  <div class="main-area" id="mainArea">
+    <div class="placeholder">Выберите чат</div>
+  </div>
+
+  <!-- Модальное окно настроек -->
+  <div id="settingsModal" class="modal hidden">
+    <div class="modal-inner">
+      <h3>Настройки профиля</h3>
+      <label>Новый ник</label>
+      <input id="newNick" placeholder="Новый ник">
+      <label>Аватар (файл)</label>
+      <input id="avatarFile" type="file" accept="image/*">
+      <div style="height:10px"></div>
+      <button id="saveProfile">Сохранить</button>
+      <button id="closeProfile" class="btn-secondary">Закрыть</button>
+      <p id="profileMsg" class="msg"></p>
+    </div>
+  </div>
+
+  <!-- Модальное окно добавления друга -->
+  <div id="addFriendModal" class="modal hidden">
+    <div class="modal-inner">
+      <h3>Добавить друга</h3>
+      <input id="friendName" placeholder="Имя пользователя">
+      <button id="sendFriendRequest">Отправить заявку</button>
+      <button onclick="closeAddFriend()" class="btn-secondary">Отмена</button>
+      <p id="friendMsg" class="msg"></p>
+    </div>
+  </div>
+
+<!-- ПОДКЛЮЧАЕМ JS (это самое главное!) -->
+<script src="lobby.js"></script>
+
+</body>
+</html>

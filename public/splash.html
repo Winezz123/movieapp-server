@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Загрузка</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="splash-body">
+
+  <div class="top-glow"></div>
+
+  <div class="center">
+    <div class="film-wrap">
+      <img id="filmIcon" src="https://img.icons8.com/ios-filled/200/ffffff/film-reel.png" alt="logo">
+    </div>
+    <div class="loading-text">Movie Together</div>
+    <div class="sub">Подключаем компоненты…</div>
+  </div>
+
+<script>
+// делаем вращение: медленно крутит 1 оборот (1.8s) затем пауза 0.9s — и так в цикле в течение ~5 секунд,
+// но мы специально остановим запуск цикла через 5 секунд и перейдём на страницу регистрации.
+const icon = document.getElementById("filmIcon");
+
+let running = true;
+function doSpin() {
+  icon.style.transition = "transform 1.8s linear";
+  icon.style.transform = "rotate(360deg)";
+  setTimeout(() => {
+    icon.style.transition = "transform 0s";
+    // сбрасываем назад мгновенно на 0deg без видимого скачка
+    icon.style.transform = "rotate(0deg)";
+  }, 1800);
+}
+
+// запуск цикла с интервалом 2.7 сек (1.8 + 0.9)
+const cycle = setInterval(doSpin, 2700);
+doSpin();
+
+// через 5 секунд — останавливаем цикл и переходим
+setTimeout(() => {
+  clearInterval(cycle);
+  // небольшой fade-out
+  document.body.style.transition = "opacity 0.6s";
+  document.body.style.opacity = "0";
+  setTimeout(() => {
+    window.location.href = "/register.html";
+  }, 600);
+}, 5000);
+</script>
+
+</body>
+</html>

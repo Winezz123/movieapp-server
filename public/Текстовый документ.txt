@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Лобби</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="lobby-body">
+
+  <div class="sidebar">
+    <div class="menu-top">
+      <button class="tab active">Друзья</button>
+      <button class="tab">Личные сообщения</button>
+    </div>
+
+    <button class="add-friend-btn" onclick="openAddFriend()">Добавить друга</button>
+
+    <div class="channels">
+      <!-- Здесь будут списки друзей — заглушки -->
+      <div class="channel" onclick="openChat('Друг 1')">Друг 1</div>
+      <div class="channel" onclick="openChat('Друг 2')">Друг 2</div>
+      <div class="channel" onclick="openChat('Друг 3')">Друг 3</div>
+    </div>
+
+    <div class="profile-block">
+      <img id="profileAvatar" class="avatar" src="https://img.icons8.com/ios-filled/100/ffffff/user.png" alt="avatar">
+      <div class="profile-info">
+        <div id="profileName" class="profile-name">User</div>
+        <div class="profile-sub">#0001</div>
+      </div>
+      <button id="settingsBtn" class="gear">⚙</button>
+    </div>
+  </div>
+
+  <div class="main-area" id="mainArea">
+    <div class="placeholder">Выберите чат</div>
+  </div>
+
+  <!-- Модальное окно настроек -->
+  <div id="settingsModal" class="modal hidden">
+    <div class="modal-inner">
+      <h3>Настройки профиля</h3>
+      <label>Новый ник</label>
+      <input id="newNick" placeholder="Новый ник">
+      <label>Аватар (файл)</label>
+      <input id="avatarFile" type="file" accept="image/*">
+      <div style="height:10px"></div>
+      <button id="saveProfile">Сохранить</button>
+      <button id="closeProfile" class="btn-secondary">Закрыть</button>
+      <p id="profileMsg" class="msg"></p>
+    </div>
+  </div>
+
+  <!-- Модальное окно добавления друга -->
+  <div id="addFriendModal" class="modal hidden">
+    <div class="modal-inner">
+      <h3>Добавить друга</h3>
+      <input id="friendName" placeholder="Имя пользователя">
+      <button id="sendFriendRequest">Отправить заявку</button>
+      <button onclick="closeAddFriend()" class="btn-secondary">Отмена</button>
+      <p id="friendMsg" class="msg"></p>
+    </div>
+  </div>
+
+<script>
+// загрузка текущего пользователя
+async function loadProfile() {
+  const username = localStorage.getItem("currentUser");
+  if (!username) {
+    window.location.href = "/register.html";
+    return;
+  }
+
+  const res = await fetch(`/api/user/${encodeURIComponent(username)}`);
+  const data = await res.json();
+  if (data.ok && data.user) {
+    const user = data.user;
+    document.getElementById("profileName").textContent = user.username;
+    if (user.avatar) {
+      document.getElementById("profileAvatar").src = user.avatar;
+    }
+  }
+}
+window.onload = loadProfile;
+
+// ======== ЗАГЛУШКА ЧАТА ========
+function openChat(name) {
+  const area = document.getElementById("mainArea");
+  area.innerHTML = `<div style="padding:40px; color:#eee; font-size:28px;">
+    <b>${name}</b>
+    <div style="margin-top:20px; font-size:16px; color:#ccc;">Здесь будет чат</div>
+  </div>`;
+}
+
+// ======== НАСТРОЙКИ ПРОФИЛЯ ========
+document.getElementById("settingsBtn").onclick = () => {
+  document.getElementById("settingsModal").classList.remove("hidden");
+};
+
+document.getElementById("closeProfile").onclick = () => {
+  document.getElementById("settingsModal").classList.add("hidden");
+};
+
+document.getElementById("saveProfile").onclick = async () => {
+  const msg = document.getElementById("profileMsg");
+  msg.textContent = "";
+
+  const username = localStorage.getItem("currentUser");
+  const newNick = document.getElementById("newNick").value.trim();
+  const fileInput = document.getElementById("avatarFile");
+
+  let avatarBase64 = null;
+  if (fileInput.files && fileInput.files[0]) {
+    avatarBase64 = await readFileAsDataURL(fileInput.files[0]);
+  }
+
+  const res = await fetch("/api/update-profile", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, newUsername: newNick || null, avatarBase64 })
+  });
+
+  const data = await res.json();
+  if (data.ok) {
+    const updated = data.user;
+    localStorage.setItem("currentUser", updated.username);
+    document.getElementById("profileName").textContent = updated.username;
+    if (updated.avatar) document.getElementById("profileAvatar").src = updated.avatar;
+
+    msg.textContent = "Сохранено";
+    setTimeout(() => {
+      document.getElementById("settingsModal").classList.add("hidden");
+      msg.textContent = "";
+    }, 900);
+  } else {
+    msg.textContent = data.message || "Ошибка";
+  }
+};
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = reject;
+    fr.readAsDataURL(file);
+  });
+}
+
+// =========================
+//  ДОБАВЛЕНИЕ ДРУГА
+// =========================
+
+function openAddFriend() {
+  document.getElementById("addFriendModal").classList.remove("hidden");
+}
+
+function closeAddFriend() {
+  document.getElementById("addFriendModal").classList.add("hidden");
+  document.getElementById("friendMsg").textContent = "";
+  document.getElementById("friendName").value = "";
+}
+
+document.getElementById("sendFriendRequest").onclick = async () => {
+  const username = localStorage.getItem("currentUser");
+  const friend = document.getElementById("friendName").value.trim();
+  const msg = document.getElementById("friendMsg");
+
+  msg.textContent = "";
+
+  if (!friend) {
+    msg.textContent = "Введите имя пользователя";
+    msg.style.color = "red";
+    return;
+  }
+
+  // Поиск
+  const find = await fetch(`/api/find/${friend}`);
+  const fdata = await find.json();
+
+  if (!fdata.ok) {
+    msg.textContent = "Хм, не получилось... Проверьте, правильное ли имя пользователя вы ввели.";
+    msg.style.color = "red";
+    return;
+  }
+
+  // Отправка заявки
+  const req = await fetch("/api/friend-request", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ from: username, to: friend })
+  });
+
+  const data = await req.json();
+
+  if (!data.ok) {
+    msg.textContent = data.message;
+    msg.style.color = "red";
+    return;
+  }
+
+  msg.textContent = "Заявка отправлена!";
+  msg.style.color = "lime";
+};
+</script>
+
+</body>
+</html>
