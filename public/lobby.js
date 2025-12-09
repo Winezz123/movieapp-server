@@ -1,6 +1,5 @@
-// lobby.js — полная версия, под lobby.html (копируй целиком)
-
-console.log("lobby.js loaded");
+// lobby.js — улучшенная версия (копируй целиком, заменяет старую версию)
+console.log("lobby.js loaded (enhanced)");
 
 // =========================
 // CONFIG
@@ -98,27 +97,23 @@ function connectWS() {
     ws.onopen = () => {
       wsConnected = true;
       console.log("WS connected:", url);
-      // send identify message too (server may expect)
       try { ws.send(JSON.stringify({ type: "identify", username: currentUser })); } catch (e) {}
     };
 
     ws.onmessage = (ev) => {
       let data = null;
       try { data = JSON.parse(ev.data); } catch (e) { return; }
-
       if (!data) return;
 
       if (data.type === "chat") {
-        // incoming chat message
         handleIncomingChat(data);
       } else if (data.type === "friend-request") {
-        // incoming friend request
-        refreshRequests();
+        loadIncomingRequests().catch(()=>{});
         showReqBadge();
       } else if (data.type === "friend-accepted") {
-        loadFriends();
+        loadFriends().catch(()=>{});
       } else if (data.type === "typing") {
-        // optional: show typing
+        // optional: typing indicator
       }
     };
 
@@ -146,8 +141,8 @@ async function sendChatMessage(to, text) {
 
   if (wsConnected && ws && ws.readyState === WebSocket.OPEN) {
     try {
-      ws.send(JSON.stringify({ type: "chat", from: currentUser, to, text }));
-      // add local
+      ws.send(JSON.stringify({ type: "chat", from: currentUser, to, text, time: Date.now() }));
+      // local append
       appendChatMessage({ from: currentUser, text, time: Date.now() });
       return { ok: true };
     } catch (e) {
@@ -156,7 +151,11 @@ async function sendChatMessage(to, text) {
   }
 
   // fallback to REST endpoint
-  return await api("/api/chat/send", "POST", { from: currentUser, to, text });
+  const r = await api("/api/chat/send", "POST", { from: currentUser, to, text });
+  if (r && r.ok) {
+    appendChatMessage({ from: currentUser, text, time: Date.now() });
+  }
+  return r;
 }
 
 // =========================
@@ -251,9 +250,25 @@ function renderFriendsList(container, friendsArr) {
     const name = typeof f === "string" ? f : (f.username || f);
     const el = document.createElement("div");
     el.className = "channel";
-    // build inner content with avatar if we can fetch it later
-    el.innerHTML = `<span class="friend-name">${escapeHtml(name)}</span>`;
-    el.onclick = () => openChat(name, null);
+
+    // build avatar + name + status
+    const avatar = (typeof f === "object" && f.avatar) ? f.avatar : "https://img.icons8.com/ios-filled/100/ffffff/user.png";
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;">
+        <img src="${avatar}" style="width:34px;height:34px;border-radius:8px;object-fit:cover;">
+        <div style="display:flex;flex-direction:column;">
+          <div style="font-weight:600;">${escapeHtml(name)}</div>
+          <div style="font-size:12px;color:#9aa0a6;">В сети</div>
+        </div>
+      </div>
+    `;
+
+    el.onclick = () => {
+      // remove notif badge if present
+      const nb = el.querySelector(".notif-badge");
+      if (nb) nb.remove();
+      openChat(name, avatar);
+    };
     container.appendChild(el);
   });
 }
@@ -261,7 +276,7 @@ function renderFriendsList(container, friendsArr) {
 // simple html escape
 function escapeHtml(s) {
   if (!s) return "";
-  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
 // =========================
@@ -275,7 +290,7 @@ async function loadIncomingRequests() {
   const res = await api(`/api/friend-requests/${encodeURIComponent(currentUser)}`, "GET");
   if (!res.ok) { area.innerHTML = "<div class='empty'>Ошибка загрузки</div>"; return; }
   const incoming = res.incoming || [];
-  if (incoming.length === 0) { area.innerHTML = "<div class='empty'>Нет входящих заявок</div>"; return; }
+  if (incoming.length === 0) { area.innerHTML = "<div class='empty'>Нет входящих заявок</div>"; updateReqBadge(0); return; }
   area.innerHTML = "";
   incoming.forEach(from => {
     const box = document.createElement("div");
@@ -325,12 +340,9 @@ async function loadOutgoingRequests() {
 }
 
 function updateReqBadge(count) {
-  // find badge element in sidebar tabs (if exists)
   const tabs = document.querySelectorAll(".tab");
-  // We added tabs manually; find the second tab for "Личные сообщения" (index 1)
   const tab = tabs && tabs[1];
   if (!tab) return;
-  // ensure a badge span
   let b = tab.querySelector(".req-badge");
   if (!b) {
     b = document.createElement("span");
@@ -347,7 +359,6 @@ function updateReqBadge(count) {
 }
 
 function showReqBadge() {
-  // reload incoming to update badge
   loadIncomingRequests().catch(()=>{});
 }
 
@@ -389,48 +400,72 @@ async function openChat(friendName, avatar) {
   if (chatInputEl) chatInputEl.focus();
 }
 
-// append message into chatMessagesEl
+// append message into chatMessagesEl (nice bubble)
 function appendChatMessage(msg) {
   if (!chatMessagesEl) return;
   // msg: { from, text, time }
   const el = document.createElement("div");
   el.className = "chat-message " + (msg.from === currentUser ? "self" : "other");
-  // show author for messages not from current user
-  let inner = "";
+
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+
+  // header (author + time) for other messages
   if (msg.from && msg.from !== currentUser) {
-    inner += `<div class="author">${escapeHtml(msg.from)}</div>`;
+    const author = document.createElement("div");
+    author.className = "chat-author";
+    author.textContent = msg.from;
+    bubble.appendChild(author);
   }
-  inner += `<div class="text">${escapeHtml(msg.text)}</div>`;
+
+  const textNode = document.createElement("div");
+  textNode.className = "chat-text";
+  textNode.textContent = msg.text;
+  bubble.appendChild(textNode);
+
   if (msg.time) {
+    const timeNode = document.createElement("div");
+    timeNode.className = "chat-time";
     const d = new Date(msg.time);
-    inner += `<div class="time">${d.toLocaleTimeString()}</div>`;
+    timeNode.textContent = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    bubble.appendChild(timeNode);
   }
-  el.innerHTML = inner;
+
+  el.appendChild(bubble);
   chatMessagesEl.appendChild(el);
+  // keep scroll to bottom
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
 }
 
 // handle incoming ws chat
 function handleIncomingChat(data) {
   const { from, to, text, time } = data;
-  // if open chat with that user, append
   if (openedChatUser && openedChatUser === from) {
     appendChatMessage({ from, text, time });
   } else {
-    // show small badge for friend
     showIncomingBadgeFor(from);
   }
 }
 
-// send message click
+// send message click + Enter handling
 if (chatSendBtn) {
   chatSendBtn.onclick = async () => {
     const txt = chatInputEl ? chatInputEl.value.trim() : "";
     if (!txt || !openedChatUser) return;
-    // send via WS or fallback
     await sendChatMessage(openedChatUser, txt);
     if (chatInputEl) chatInputEl.value = "";
   };
+}
+if (chatInputEl) {
+  chatInputEl.addEventListener("keydown", async (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      const txt = chatInputEl.value.trim();
+      if (!txt || !openedChatUser) return;
+      await sendChatMessage(openedChatUser, txt);
+      chatInputEl.value = "";
+    }
+  });
 }
 
 // =========================
@@ -439,7 +474,8 @@ if (chatSendBtn) {
 function showIncomingBadgeFor(name) {
   const nodes = document.querySelectorAll(".channel");
   nodes.forEach(n => {
-    if ((n.textContent || "").trim() === name) {
+    const text = (n.querySelector(".friend-name") ? n.querySelector(".friend-name").textContent : n.textContent) || "";
+    if (text.trim() === name) {
       let b = n.querySelector(".notif-badge");
       if (!b) {
         b = document.createElement("span");
@@ -447,8 +483,9 @@ function showIncomingBadgeFor(name) {
         b.style.cssText = "background:red;color:#fff;padding:2px 6px;border-radius:10px;margin-left:8px;font-size:12px;";
         n.appendChild(b);
       }
-      // set count or dot
-      b.textContent = "1";
+      // increase counter if needed
+      const current = parseInt(b.textContent || "0", 10) || 0;
+      b.textContent = current + 1;
     }
   });
 }
@@ -487,26 +524,19 @@ if (sendFriendRequestBtn) {
 // Tabs: friends / dms
 // =========================
 function showFriendsMenu() {
-  // show friends (sidebar already), show placeholder
   ensureHideRequests();
   ensureHideChat();
   if (placeholderEl) placeholderEl.classList.remove("hidden");
 }
 function showDmMenu() {
-  // show placeholder "Выберите чат"
   ensureHideRequests();
   ensureHideChat();
   if (placeholderEl) placeholderEl.classList.remove("hidden");
-  // also refresh incoming requests badge/count
   loadIncomingRequests().catch(()=>{});
 }
 
-function ensureHideChat() {
-  if (chatAreaEl) chatAreaEl.classList.add("hidden");
-}
-function ensureHideRequests() {
-  if (requestsAreaEl) requestsAreaEl.classList.add("hidden");
-}
+function ensureHideChat() { if (chatAreaEl) chatAreaEl.classList.add("hidden"); }
+function ensureHideRequests() { if (requestsAreaEl) requestsAreaEl.classList.add("hidden"); }
 
 // =========================
 // Refresh helpers
