@@ -1,132 +1,86 @@
-async function loadProfile() {
-  const username = localStorage.getItem("currentUser");
-  if (!username) {
-    window.location.href = "/register.html";
-    return;
-  }
+// ==================== ЗАГРУЗКА ЗАЯВОК ====================
 
-  const res = await fetch(`/api/user/${encodeURIComponent(username)}`);
-  const data = await res.json();
+async function loadIncomingRequests() {
+    const username = localStorage.getItem("currentUser");
+    if (!username) return;
 
-  if (data.ok) {
-    document.getElementById("profileName").textContent = data.user.username;
+    const res = await fetch(`/api/friend-requests/${username}`);
+    const data = await res.json();
 
-    if (data.user.avatar) {
-      document.getElementById("profileAvatar").src = data.user.avatar;
+    const area = document.getElementById("mainArea");
+
+    if (!data.ok) {
+        return;
     }
-  }
+
+    if (data.incoming.length === 0) {
+        area.innerHTML = `<div class="placeholder">Нет входящих заявок</div>`;
+        return;
+    }
+
+    area.innerHTML = `<h2 class="friend-title">Входящие заявки</h2>`;
+
+    data.incoming.forEach(user => {
+        area.innerHTML += `
+            <div class="friend-request">
+                <span>${user}</span>
+                <button onclick="acceptRequest('${user}')">Принять</button>
+            </div>
+        `;
+    });
 }
 
-window.onload = loadProfile;
+async function loadOutgoingRequests() {
+    const username = localStorage.getItem("currentUser");
+    if (!username) return;
 
-// ==================== ЧАТЫ ====================
-function openChat(name) {
-  const area = document.getElementById("mainArea");
-  area.innerHTML = `
-    <div style="padding:40px; color:#eee; font-size:28px;">
-      <b>${name}</b>
-      <div style="margin-top:20px; font-size:16px; color:#ccc;">Здесь будет чат</div>
-    </div>`;
+    const res = await fetch(`/api/friend-outgoing/${username}`);
+    const data = await res.json();
+
+    const area = document.getElementById("mainArea");
+
+    if (!data.ok) {
+        return;
+    }
+
+    if (data.outgoing.length === 0) {
+        area.innerHTML += `<div class="placeholder">Нет исходящих заявок</div>`;
+        return;
+    }
+
+    area.innerHTML += `<h2 class="friend-title">Исходящие заявки</h2>`;
+
+    data.outgoing.forEach(user => {
+        area.innerHTML += `
+            <div class="friend-request outgoing">
+                <span>${user}</span>
+                <span class="pending">Ожидание...</span>
+            </div>
+        `;
+    });
 }
 
-// ==================== НАСТРОЙКИ ====================
-document.getElementById("settingsBtn").onclick = () => {
-  document.getElementById("settingsModal").classList.remove("hidden");
-};
+// ==================== ПРИНЯТЬ ЗАЯВКУ ====================
 
-document.getElementById("closeProfile").onclick = () => {
-  document.getElementById("settingsModal").classList.add("hidden");
-};
+async function acceptRequest(fromUser) {
+    const username = localStorage.getItem("currentUser");
 
-document.getElementById("saveProfile").onclick = async () => {
-  const msg = document.getElementById("profileMsg");
-  msg.textContent = "";
+    const res = await fetch("/api/friend-accept", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, from: fromUser })
+    });
 
-  const username = localStorage.getItem("currentUser");
-  const newNick = document.getElementById("newNick").value.trim();
-  const fileInput = document.getElementById("avatarFile");
+    const data = await res.json();
 
-  let avatarBase64 = null;
-  if (fileInput.files && fileInput.files[0]) {
-    avatarBase64 = await readFileAsDataURL(fileInput.files[0]);
-  }
-
-  const res = await fetch("/api/update-profile", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, newUsername: newNick || null, avatarBase64 })
-  });
-
-  const data = await res.json();
-  if (data.ok) {
-    localStorage.setItem("currentUser", data.user.username);
-    document.getElementById("profileName").textContent = data.user.username;
-    if (data.user.avatar) document.getElementById("profileAvatar").src = data.user.avatar;
-
-    msg.textContent = "Сохранено!";
-    setTimeout(() => {
-      document.getElementById("settingsModal").classList.add("hidden");
-      msg.textContent = "";
-    }, 900);
-  } else {
-    msg.textContent = data.message || "Ошибка";
-  }
-};
-
-function readFileAsDataURL(file) {
-  return new Promise((resolve, reject) => {
-    const fr = new FileReader();
-    fr.onload = () => resolve(fr.result);
-    fr.onerror = reject;
-    fr.readAsDataURL(file);
-  });
+    if (data.ok) {
+        loadIncomingRequests();
+    }
 }
 
-// ==================== ДОБАВЛЕНИЕ ДРУГА ====================
-function openAddFriend() {
-  document.getElementById("addFriendModal").classList.remove("hidden");
-}
+// ==================== АВТО-ОБНОВЛЕНИЕ ====================
 
-function closeAddFriend() {
-  document.getElementById("addFriendModal").classList.add("hidden");
-  document.getElementById("friendMsg").textContent = "";
-  document.getElementById("friendName").value = "";
-}
-
-document.getElementById("sendFriendRequest").onclick = async () => {
-  const username = localStorage.getItem("currentUser");
-  const friend = document.getElementById("friendName").value.trim();
-  const msg = document.getElementById("friendMsg");
-
-  if (!friend) {
-    msg.textContent = "Введите имя пользователя";
-    msg.style.color = "red";
-    return;
-  }
-
-  const find = await fetch(`/api/find/${friend}`);
-  const fdata = await find.json();
-
-  if (!fdata.ok) {
-    msg.textContent = "Хм, не получилось... Проверьте имя пользователя.";
-    msg.style.color = "red";
-    return;
-  }
-
-  const req = await fetch("/api/friend-request", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ from: username, to: friend })
-  });
-
-  const data = await req.json();
-
-  if (!data.ok) {
-    msg.textContent = data.message;
-    msg.style.color = "red";
-    return;
-  }
-
-  msg.textContent = "Заявка отправлена!";
-  msg.style.color = "lime";
-};
+setInterval(() => {
+    loadIncomingRequests();
+    loadOutgoingRequests();
+}, 5000); // каждые 5 секунд
