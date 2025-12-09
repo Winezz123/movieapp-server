@@ -41,8 +41,8 @@ app.post("/api/register", (req, res) => {
         password,
         avatar: null,
         friends: [],
-        incoming: [], // входящие заявки
-        outgoing: []  // исходящие заявки
+        incoming: [],
+        outgoing: []
     };
 
     users.push(user);
@@ -88,7 +88,6 @@ app.post("/api/update-profile", (req, res) => {
     if (!user)
         return res.json({ ok: false, message: "Пользователь не найден" });
 
-    // изменение ника
     if (newUsername && newUsername !== username) {
         if (users.find(u => u.username.toLowerCase() === newUsername.toLowerCase()))
             return res.json({ ok: false, message: "Ник уже занят" });
@@ -96,7 +95,6 @@ app.post("/api/update-profile", (req, res) => {
         user.username = newUsername;
     }
 
-    // изменение аватарки
     if (avatarBase64) {
         user.avatar = avatarBase64;
     }
@@ -105,7 +103,7 @@ app.post("/api/update-profile", (req, res) => {
     return res.json({ ok: true, user });
 });
 
-// =============== FIND USER (для поиска друзей) ===============
+// =============== FIND USER ===============
 
 app.get("/api/find/:username", (req, res) => {
     const name = req.params.username.toLowerCase();
@@ -167,6 +165,34 @@ app.post("/api/friend-accept", (req, res) => {
     writeUsers(users);
 
     return res.json({ ok: true });
+});
+
+// =============== NEW: GET INCOMING REQUESTS ===============
+
+app.get("/api/friend-requests/:username", (req, res) => {
+    const { username } = req.params;
+    const users = readUsers();
+
+    const user = users.find(u => u.username === username);
+
+    if (!user)
+        return res.json({ ok: false });
+
+    return res.json({ ok: true, incoming: user.incoming });
+});
+
+// =============== NEW: GET OUTGOING REQUESTS ===============
+
+app.get("/api/friend-outgoing/:username", (req, res) => {
+    const { username } = req.params;
+    const users = readUsers();
+
+    const user = users.find(u => u.username === username);
+
+    if (!user)
+        return res.json({ ok: false });
+
+    return res.json({ ok: true, outgoing: user.outgoing });
 });
 
 // =============== START SERVER ===============
